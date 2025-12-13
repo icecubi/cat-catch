@@ -132,7 +132,7 @@
     "message": "Filtro"
   },
   "clear": {
-    "message": "Borrar"
+    "message": "Limpiar"
   },
   "deepSearch": {
     "message": "Buscar"
@@ -1010,6 +1010,9 @@
   "alertimport": {
   	"message": "importación completada"
   },
+  "sideurlprotocol": {
+    "message": "Protocolo URL m3u8dl"
+  }, 
   "deleteDuplicateFilenames": {
     "message": "Eliminar nombres de archivo duplicados"
   }
