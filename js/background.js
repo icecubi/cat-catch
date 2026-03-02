@@ -301,10 +301,15 @@ function save(tabId) {
     clearTimeout(debounce);
     debounceTime = Date.now();
     debounceCount = 0;
-    (chrome.storage.session ?? chrome.storage.local).set({ MediaData: cacheData }, function () {
-        chrome.runtime.lastError && console.log(chrome.runtime.lastError);
-    });
-    cacheData[tabId] && SetIcon({ number: cacheData[tabId].length, tabId: tabId });
+    if (cacheData[tabId]) {
+        // 单个标签数据超过99条 不再保存到storage
+        if (cacheData[tabId]?.length <= 99) {
+            (chrome.storage.session ?? chrome.storage.local).set({ MediaData: cacheData }, function () {
+                chrome.runtime.lastError && console.log(chrome.runtime.lastError);
+            });
+        }
+        SetIcon({ number: cacheData[tabId].length, tabId: tabId });
+    }
 }
 
 /**
@@ -750,6 +755,29 @@ chrome.webNavigation.onCompleted.addListener(function (details) {
     }
 });
 
+// 操作符检查
+function operatorCheck(size, Obj) {
+    const targetSize = Obj.size * 1024;
+    switch (Obj.operator) {
+        case "=":
+            return size == targetSize;
+        case "<":
+            return size < targetSize;
+        case ">":
+            return size > targetSize;
+        case "<=":
+            return size <= targetSize;
+        case ">=":
+            return size >= targetSize;
+        case "!=":
+            return size != targetSize;
+        case "~":
+            return (Obj.min ? size >= Obj.min * 1024 : true) && (Obj.max ? size <= Obj.max * 1024 : true);
+        default:
+            return size <= targetSize;
+    }
+}
+
 /**
  * 检查扩展名和大小
  * @param {String} ext 
@@ -760,7 +788,10 @@ function CheckExtension(ext, size) {
     const Ext = G.Ext.get(ext);
     if (!Ext) { return false; }
     if (!Ext.state) { return "break"; }
-    if (Ext.size != 0 && size != undefined && size <= Ext.size * 1024) { return "break"; }
+    // if (Ext.size != 0 && size != undefined && size <= Ext.size * 1024) { return "break"; }
+    if (Ext.size != 0 && size != undefined && !operatorCheck(size, Ext)) {
+        return "break";
+    }
     return true;
 }
 
@@ -774,7 +805,9 @@ function CheckType(dataType, dataSize) {
     const typeInfo = G.Type.get(dataType.split("/")[0] + "/*") || G.Type.get(dataType);
     if (!typeInfo) { return false; }
     if (!typeInfo.state) { return "break"; }
-    if (typeInfo.size != 0 && dataSize != undefined && dataSize <= typeInfo.size * 1024) { return "break"; }
+    if (typeInfo.size != 0 && dataSize != undefined && !operatorCheck(dataSize, typeInfo)) {
+        return "break";
+    }
     return true;
 }
 
