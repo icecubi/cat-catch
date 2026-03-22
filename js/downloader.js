@@ -11,6 +11,9 @@ let _index = null;  // 当前页面 tab index
 // 是否表单提交下载 表单提交 不使用自定义文件名
 const downloadData = localStorage.getItem('downloadData') ? JSON.parse(localStorage.getItem('downloadData')) : [];
 
+let iframeFFmpeg = null; // iframe FFmpeg窗口对象
+let iframeFFmpegReady = false; // iframe FFmpeg是否准备就绪
+
 awaitG(() => {
     loadCSS();
     // 获取当前标签信息
@@ -70,15 +73,30 @@ awaitG(() => {
     });
 });
 
-function start() {
+const createIframeFFmpeg = () => {
+    if (!iframeFFmpeg) {
+        iframeFFmpeg = document.createElement('iframe');
+        document.querySelector("#iframeBox").appendChild(iframeFFmpeg);
+        iframeFFmpeg.onload = function () {
+            iframeFFmpegReady = true;
+        };
+        iframeFFmpeg.src = G.ffmpegConfig.url + '?_=' + new Date().getTime();
+    }
+    return iframeFFmpeg;
+}
 
+function start() {
     // 提前打开ffmpeg页面
     if (_ffmpeg) {
-        chrome.runtime.sendMessage({
-            Message: "catCatchFFmpeg",
-            action: "openFFmpeg",
-            extra: i18n.waitingForMedia
-        });
+        if (G.iframeFFmpeg) {
+            createIframeFFmpeg();
+        } else {
+            chrome.runtime.sendMessage({
+                Message: "catCatchFFmpeg",
+                action: "openFFmpeg",
+                extra: i18n.waitingForMedia
+            });
+        }
     }
 
     $("#autoClose").prop("checked", G.downAutoClose);
@@ -316,19 +334,21 @@ function start() {
         }
 
         // 以下为在线ffmpeg返回结果
-        if (Message.Message != "catCatchFFmpegResult" || Message.state != "ok" || _tabId == 0 || Message.tabId != _tabId) { return; }
+        if (Message.Message != "catCatchFFmpegResult" || _tabId == 0 || Message.tabId != _tabId) { return; }
 
         // 发送状态提示
-        const $dom = itemDOM.get(Message.index);
-        $dom && $dom.progressText.html(i18n.hasSent);
-        down.buffer[Message.index] = null; //清空buffer
+        if (Message.state == "ok") {
+            const $dom = itemDOM.get(Message.index);
+            $dom && $dom.progressText.html(i18n.hasSent);
+            down.buffer[Message.index] = null; //清空buffer
+        }
 
         // 全部发送完成 检查自动关闭
-        if (down.success == down.total) {
+        if (down.success == down.total && Message.state == "done") {
             if ($("#autoClose").prop("checked")) {
                 setTimeout(() => {
                     closeTab();
-                }, Math.ceil(Math.random() * 999));
+                }, 1000);
             }
         }
     });
@@ -352,7 +372,7 @@ function start() {
             if ($("#autoClose").prop("checked")) {
                 setTimeout(() => {
                     closeTab();
-                }, Math.ceil(Math.random() * 999));
+                }, 1000);
             }
         }
     });
@@ -384,6 +404,33 @@ function sendFile(action, data, fragment) {
     if (data instanceof ArrayBuffer) {
         data = ArrayBufferToBlob(data, { type: fragment.contentType });
     }
+
+    // 嵌套在线ffmpeg模式
+    if (G.iframeFFmpeg) {
+        document.querySelector("#iframeBox").style.display = "block";
+        const baseData = {
+            action: action,
+            title: stringModify(fragment.title),
+            tabId: _tabId,
+            data: data,
+            version: G.ffmpegConfig.version,
+            index: fragment.index
+        };
+        if (action === "merge") {
+            baseData.taskId = _taskId;
+            baseData.quantity = _data.length;
+        }
+        if (!iframeFFmpeg) {
+            createIframeFFmpeg();
+            setTimeout(sendFile, 1000, action, data, fragment);
+        } else if (iframeFFmpegReady) {
+            iframeFFmpeg.contentWindow.postMessage(baseData, '*');
+        } else {
+            setTimeout(sendFile, 500, action, data, fragment);
+        }
+        return;
+    }
+
     chrome.tabs.query({ url: G.ffmpegConfig.url + "*" }, function (tabs) {
         // 等待ffmpeg 打开并且可用
         if (tabs.length === 0) {
@@ -415,7 +462,6 @@ function sendFile(action, data, fragment) {
             baseData.taskId = _taskId;
             baseData.quantity = _data.length;
         }
-
         chrome.runtime.sendMessage(baseData);
     });
 }

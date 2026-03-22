@@ -56,7 +56,7 @@ let checkboxState = true;
 
 // 生成资源DOM
 function AddMedia(data, currentTab = true) {
-    data._title = data.title.replace(/[/\\]/g, "_");
+    data._title = data.title;
     data.title = stringModify(data.title);
     //文件名
     data.name = isEmpty(data.name) ? data.title + '.' + data.ext : decodeURIComponent(stringModify(data.name));
@@ -761,7 +761,7 @@ const interval = setInterval(async function () {
     clearInterval(interval);
 
     if (G.popup && !_tabId) {
-        closeTab();
+        window.close();
         $("#popup").click();
         return;
     }

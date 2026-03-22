@@ -1018,5 +1018,14 @@
   },
   "isBlockedSite": {
     "message": "該網站要求禁止運行本程式"
+  },
+  "onlineFFmpeg": {
+    "message": "在線ffmpeg服務"
+  },
+  "ffmpegIsNotReady": {
+    "message": "在線ffmpeg服務未就緒, 請稍後再試"
+  },
+  "iframeFFmpeg": {
+    "message": "內嵌ffmpeg服務"
   }
 }

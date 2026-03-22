@@ -99,6 +99,10 @@ const $fileDuration = $("#fileDuration");   // 下载总时长
 const $m3u8dlArg = $("#m3u8dlArg"); // m3u8DL 参数
 const $media_file = $("#media_file");   // 切片列表
 
+/* 框架ffmpeg */
+let iframeFFmpeg = null;
+let iframeFFmpegReady = false;
+
 /**
  * 初始化函数，界面默认配置 loadSource载入 m3u8 url
  */
@@ -834,20 +838,17 @@ $("#localFile").click(function () {
 // 播放m3u8
 $("#play").click(function () {
     if ($(this).data("switch") == "on") {
-        $("#video").show();
+        showTab("#video");
         hls.attachMedia($("#video")[0]);
-        $media_file.hide();
-        $("#downList").hide();
         $(this).html(i18n.close).data("switch", "off");
         hls.on(Hls.Events.MEDIA_ATTACHED, function () {
             video.play();
         });
         return;
     }
-    $("#video").hide();
     hls.detachMedia($("#video")[0]);
-    $media_file.show();
     $(this).html(i18n.play).data("switch", "on");
+    showTab("#media_file");
 });
 // 调用m3u8DL下载
 $("#m3u8DL").click(function () {
@@ -1141,8 +1142,10 @@ $("#tsAddArg").click(function () {
 });
 // 下载进度
 $("#downProgress").click(function () {
-    $media_file.hide();
-    $("#downList").show();
+    showTab("#downList");
+});
+$("#onlineFFmpeg").click(function () {
+    showTab("#iframeBox");
 });
 // 设置请求头
 $(document).on("click", "#setRequestHeaders, #setRequestHeadersError", function () {
@@ -1568,6 +1571,33 @@ function mergeTsNew(down) {
         if (_taskId) {
             data.taskId = _taskId;
         }
+
+        // 使用iframe传输
+        if (G.iframeFFmpeg) {
+            document.querySelector("#onlineFFmpeg").style.display = "block";
+            // 转数据结构
+            const fileData = {
+                ...data,
+                data: fileBlob,
+                version: G.ffmpegConfig.version
+            };
+            if (!iframeFFmpeg) {
+                iframeFFmpeg = document.createElement('iframe');
+                document.querySelector("#iframeBox").appendChild(iframeFFmpeg);
+                iframeFFmpeg.onload = function () {
+                    $progress.html(i18n.sendFfmpeg);
+                    iframeFFmpegReady = true;
+                    iframeFFmpeg.contentWindow.postMessage(fileData, '*');
+                };
+                iframeFFmpeg.src = G.ffmpegConfig.url + '?_=' + new Date().getTime();
+            } else if (iframeFFmpegReady) {
+                iframeFFmpeg.contentWindow.postMessage(fileData, '*');
+            } else {
+                alert(i18n.ffmpegIsNotReady);
+            }
+            showTab("#iframeBox");
+            return;
+        }
         chrome.runtime.sendMessage(data, function (response) {
             if (!chrome.runtime?.lastError && response && response == "ok") {
                 $progress.html(i18n.sendFfmpeg);
@@ -1736,8 +1766,7 @@ function timeToIndex(time) {
 }
 // 写入ts链接
 function writeText(text) {
-    $media_file.show();
-    $("#downList").hide();
+    showTab("#media_file");
     if (typeof text == "object") {
         let url = [];
         for (let key in text) {
@@ -1932,6 +1961,14 @@ function highlight() {
     });
 }
 
+// 显示面板
+function showTab(Obj) {
+    const panels = ["#iframeBox", "#media_file", "#downList", "#video"];
+    panels.forEach(sel => {
+        sel === Obj ? $(sel).show() : $(sel).hide();
+    });
+}
+
 let autoMergeTimer = null;
 function autoMerge() {
     if (!autoDown) { return; }
@@ -1943,8 +1980,9 @@ function autoMerge() {
 
 // 接收 catCatchFFmpegResult
 chrome.runtime.onMessage.addListener(function (Message, sender, sendResponse) {
-    if (!Message.Message || Message.Message != "catCatchFFmpegResult" || Message.state != "ok" || currentTabId == 0 || Message.tabId != currentTabId) { return; }
+    // if (!Message.Message || Message.Message != "catCatchFFmpegResult" || Message.state != "ok" || currentTabId == 0 || Message.tabId != currentTabId || G.iframeFFmpeg) { return; }
+    if (!Message.Message || Message.Message != "catCatchFFmpegResult" || Message.state != "done" || currentTabId == 0 || Message.tabId != currentTabId) { return; }
     setTimeout(() => {
         $("#autoClose").prop("checked") && closeTab();
-    }, Math.ceil(Math.random() * 500));
+    }, 1000);
 });
