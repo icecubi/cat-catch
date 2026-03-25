@@ -701,7 +701,7 @@ function parseTs(data) {
                     }
                     $("#maybeKey").show();
                     maybeKey.change(function () {
-                        this.value != "tips" && $("#customKey").val(this.value);
+                        $("#customKey").val(this.value != "tips" ? this.value : "");
                         $m3u8dlArg.val(getM3u8DlArg());
                     });
                 });
@@ -1416,6 +1416,7 @@ function downloadNew(start = 0, end = _fragments.length) {
         item.root.classList.add("error");
         item.retryBtn.style.display = "inline";
         item.stopBtn.style.display = "none";
+        item.root.scrollIntoView({ behavior: "smooth", block: "center" });
 
     });
     // 切片下载完成
@@ -1476,9 +1477,6 @@ function downloadNew(start = 0, end = _fragments.length) {
         console.log(error);
     });
 
-    // 开始下载
-    down.start();
-
     // 缓存操作DOM
     down.fragments.forEach((fragment) => {
         const root = document.querySelector(`#media-item-${fragment.sn}`);
@@ -1487,6 +1485,7 @@ function downloadNew(start = 0, end = _fragments.length) {
         // 停止按钮
         const stopBtn = document.createElement("img");
         stopBtn.classList.add("icon", "stop");
+        stopBtn.src = "img/stop.svg";
         stopBtn.title = i18n.stopDownload;
         stopBtn.addEventListener("click", function (e) {
             e.stopPropagation();
@@ -1501,6 +1500,7 @@ function downloadNew(start = 0, end = _fragments.length) {
         // 重下按钮
         const retryBtn = document.createElement("img");
         retryBtn.classList.add("icon", "retry", "hide");
+        retryBtn.src = "img/retry.svg";
         retryBtn.title = i18n.retryDownload;
         retryBtn.addEventListener("click", function (e) {
             e.stopPropagation();
@@ -1521,8 +1521,10 @@ function downloadNew(start = 0, end = _fragments.length) {
             retryBtn: retryBtn,
             copyBtn: copyBtn
         });
-
     });
+
+    // 开始下载
+    down.start();
 
     // 强制下载
     $("#ForceDownload").off("click").click(function () {
@@ -1548,6 +1550,7 @@ function downloadNew(start = 0, end = _fragments.length) {
             buttonState("#mergeTs", true);
             $fileSize.html("");
             $fileDuration.html("");
+            initDownload();
         }, 1000);
     });
 }
@@ -1852,50 +1855,38 @@ function timeToIndex(time) {
     let totalSeconds = time.split(":").reduce((acc, time) => 60 * acc + +time);
     return _fragments.findIndex(fragment => (totalSeconds -= fragment.duration) < 0);
 }
-// 写入ts链接
+
+/**
+ * 把所有切片地址写入页面
+ * @param {Array} text 所有切片地址的对象数组
+ */
 function writeText(text) {
-    const list = document.querySelector("#mediaList");
-    list.innerHTML = "";
-
-    if (typeof text == "object") {
-        text.forEach((data, index) => {
-            const item = document.createElement("div");
-            item.classList.add("media-item");
-            item.classList.add("selected");
-            item.dataset.index = index;
-            item.dataset.sn = data.sn;
-            item.id = `media-item-${data.sn}`;
-
-            // URL
-            const urlSpan = document.createElement("span");
-            urlSpan.classList.add("url-text");
-            urlSpan.textContent = data.url;
-
-            // tips
-            const statusSpan = document.createElement("span");
-            statusSpan.classList.add("error-tip");
-
-            // 复制图标
-            const copyBtn = document.createElement("img");
-            copyBtn.classList.add("icon", "copy");
-
-            // 复制点击事件
-            copyBtn.addEventListener("click", (e) => {
-                e.stopPropagation();
-                navigator.clipboard.writeText(data.url);
-            });
-            item.addEventListener("click", (e) => {
-                const idx = e.currentTarget.dataset.index;
-                _fragments[idx].selected = !_fragments[idx].selected;
-                item.classList.toggle("selected");
-            });
-            item.appendChild(urlSpan);
-            item.appendChild(statusSpan);
-            item.appendChild(copyBtn);
-            list.appendChild(item);
-        });
-    }
+    if (!Array.isArray(text)) return;
+    document.querySelector("#mediaList").innerHTML = text.map((data, index) => `
+        <div class="media-item selected" data-index="${index}" id="media-item-${data.sn}">
+            <span class="url-text" title="${data.url}">${data.url}</span>
+            <span class="media-tip"></span>
+            <img class="icon copy" src="img/copy.png"/>
+        </div>`).join('');
 }
+document.querySelector("#mediaList").addEventListener("click", (e) => {
+    const mediaItem = e.target.closest(".media-item");
+    if (!mediaItem) return;
+    const copyBtn = e.target.closest(".copy");
+    const urlText = mediaItem.querySelector(".url-text");
+    if (copyBtn) {
+        navigator.clipboard.writeText(urlText.textContent);
+        return;
+    }
+    // 双击展开/隐藏 多行url
+    if (e.detail === 2) {
+        document.querySelector("#mediaList").classList.toggle("expand-all");
+    }
+    const idx = mediaItem.dataset.index;
+    _fragments[idx].selected = !_fragments[idx].selected;
+    mediaItem.classList.toggle("selected");
+});
+
 // 获取文件名
 function GetFile(str) {
     str = str.split("?")[0];

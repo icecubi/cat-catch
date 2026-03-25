@@ -189,7 +189,7 @@ button,
   min-height: 35px;
 }
 
-#m3u8_url,
+/* #m3u8_url, */
 #mpd_url,
 .test_url {
   overflow: hidden;
@@ -197,6 +197,27 @@ button,
   text-overflow: ellipsis;
   word-break: break-all;
   color: var(--text2-color);
+}
+#m3u8_url {
+  overflow: hidden;
+  display: block;
+  text-overflow: ellipsis;
+  word-break: break-all;
+  white-space: nowrap;
+  color: var(--text2-color);
+}
+/* 悬停0.5秒后显示完整URL */
+#m3u8_url:hover {
+  animation: delayShow 0.5s forwards;
+}
+@keyframes delayShow {
+  0%,
+  99% {
+    white-space: nowrap;
+  }
+  100% {
+    white-space: normal;
+  }
 }
 
 .block {
@@ -235,12 +256,16 @@ textarea {
 
 #m3u8Content {
   word-break: break-all;
+  box-sizing: border-box;
+  border-radius: 4px;
+  font-family: monospace;
+  padding: 10px;
 }
 
 #m3u8Content,
 #jsonText,
 #m3u8Text {
-  height: 55vh;
+  height: 60vh;
 }
 
 #formatStr {
@@ -280,6 +305,7 @@ textarea {
 
 .m3u8Key {
   width: 300px;
+  border: var(--button-border);
 }
 
 #PlayerTemplate {
@@ -465,8 +491,8 @@ textarea {
   left: 50%;
   transform: translateX(-50%);
 
-  background: #ffffff;
-  border: 1px solid #ccc;
+  background: var(--background-color);
+  border: var(--button-border);
   border-radius: 6px;
   padding: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -481,7 +507,7 @@ textarea {
   transform: translateX(-50%);
   border-width: 6px 6px 0;
   border-style: solid;
-  border-color: #ffffff transparent transparent;
+  border-color: var(--background-color) transparent transparent;
 }
 
 .break-all {
@@ -490,6 +516,10 @@ textarea {
 
 #mergeTs {
   flex: 1;
+}
+
+#customFilename {
+  margin-right: 0.5rem;
 }
 
 /* MPD*/
@@ -580,10 +610,11 @@ a.json-placeholder:hover {
 }
 
 .iframeBox {
-  height: 75vh;
+  height: 60vh;
   display: none;
   width: 100%;
-  border: solid 1px var(--text-color);
+  /* border: solid 1px var(--text-color); */
+  margin-top: 3px;
 }
 .iframeBox iframe {
   width: 100%;
@@ -737,7 +768,13 @@ a.json-placeholder:hover {
 .media-item .url-text {
   flex: 1;
   word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   /* margin-right: 2px; */
+}
+#mediaList.expand-all .media-item .url-text {
+  white-space: normal;
 }
 
 .media-item .icon {
@@ -749,16 +786,6 @@ a.json-placeholder:hover {
   transition:
     opacity 0.2s,
     transform 0.1s;
-}
-
-.media-item .icon.copy {
-  content: url(../img/copy.png);
-}
-.media-item .icon.stop {
-  content: url(../img/stop.svg);
-}
-.media-item .icon.retry {
-  content: url(../img/retry.svg);
 }
 
 .media-item .icon:hover {
@@ -786,10 +813,10 @@ a.json-placeholder:hover {
   ) !important;
 }
 
-.media-item .error-tip {
-  font-size: 11px;
+.media-item .media-tip {
+  font-size: 12px;
   color: var(--text-error-color);
-  margin-left: 8px;
-  /* font-weight: bold; */
+  margin: 0 4px 0 4px;
+  font-weight: bold;
   flex-shrink: 0;
 }
