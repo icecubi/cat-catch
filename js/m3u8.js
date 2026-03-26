@@ -13,6 +13,8 @@ let autoDown = params.get("autoDown");  //是否自动下载
 const autoClose = params.get("autoClose");  // 下载完是否关闭页面
 let retryCount = parseInt(params.get("retryCount"));  // 重试次数
 
+const _isMaster = params.get("isMaster");   // 是否为主任务
+
 let currentTabId = 0;   // 本页面tab Id
 let currentIndex = 0;   // 本页面Index
 
@@ -104,6 +106,9 @@ let iframeFFmpeg = null;
 let iframeFFmpegReady = false;
 let iframeFFmpegReadyRetryCount = 0;
 
+// 自动合并
+let autoMergeTimer = null;
+
 /**
  * 初始化函数，界面默认配置 loadSource载入 m3u8 url
  */
@@ -139,7 +144,7 @@ function init() {
     $("#skipDecrypt").prop("checked", G.M3u8SkipDecrypt);
     $("#StreamSaver").prop("checked", G.M3u8StreamSaver);
     $("#ffmpeg").prop("checked", G.M3u8Ffmpeg);
-    $("#autoClose").prop("checked", autoClose ? true : G.M3u8AutoClose);
+    $("#autoClose").prop("checked", autoClose && autoClose == 1 ? true : G.M3u8AutoClose);
 
     // 发送到ffmpeg取消边下边存设置
     _ffmpeg && $("#StreamSaver").prop("checked", false);
@@ -286,6 +291,23 @@ function init() {
     G.saveAs && $("#saveAs").prop("checked", true);
 }
 
+const channel = new BroadcastChannel('m3u8Channel');
+channel.onmessage = (event) => {
+    const data = event.data;
+    if (data.Message == "mergeData" && data.data && _isMaster == 1) {
+        data.data.tabId = currentTabId;
+        createIframeFFmpeg(data.data);
+        channel.postMessage({ Message: "mergeDataReceived", taskId: data.data?.taskId });
+    }
+    if (data.Message == "mergeDataReceived" && _isMaster == 0) {
+        setTimeout(() => {
+            $progress.html(i18n.sendFfmpeg);
+            $("#autoClose").prop("checked") && closeTab();
+        }, 1000);
+    }
+};
+
+
 // 监听 MANIFEST_LOADED 装载解析的m3u8 URL
 hls.on(Hls.Events.MANIFEST_LOADED, function (event, data) {
     $("#m3u8_url").attr("href", data.url).html(data.url);
@@ -390,9 +412,9 @@ hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
                     initiator: _initiator,
                     requestHeaders: requestHeaders,
                 }
-                const option = { ffmpeg: "merge", quantity: 2, taskId: taskId, autoDown: true, autoClose: true };
-                openParser({ ...data, url: dataMerge.audio.url }, option);
-                openParser({ ...data, url: dataMerge.video.url }, option);
+                const options = { ffmpeg: "merge", quantity: 2, taskId: taskId, autoDown: true, autoClose: true };
+                openParser({ ...data, url: dataMerge.audio.url }, { ...options, isMaster: true });
+                openParser({ ...data, url: dataMerge.video.url }, { ...options, isMaster: false });
             }
         });
     } else {
@@ -684,7 +706,7 @@ function parseTs(data) {
         $("#retryCount").parent().hide();
     }
     if (!_fragments.some(fragment => fragment.initSegment) && autoDown) {
-        $("#mergeTs").click();
+        autoMerge();
     }
 
     if (tabId && tabId != -1) {
@@ -1139,7 +1161,7 @@ $("#mergeTs").click(async function () {
     // 提前打开ffmpeg
     // _ffmpeg && createIframeFFmpeg();
     if (_ffmpeg || $("#ffmpeg").prop("checked")) {
-        createIframeFFmpeg();
+        _isMaster == 1 && createIframeFFmpeg();
     }
 
     downloadNew();
@@ -1646,36 +1668,24 @@ function mergeTsNew(down) {
 
         // 使用iframe传输
         if (G.iframeFFmpeg) {
-            document.querySelector("#onlineFFmpeg").style.display = "block";
+
             // 转数据结构
             const fileData = {
                 ...data,
                 data: fileBlob,
                 version: G.ffmpegConfig.version
             };
-            if (!iframeFFmpeg) {
-                createIframeFFmpeg(() => {
-                    iframeFFmpeg.contentWindow.postMessage(fileData, '*');
-                    $progress.html(i18n.sendFfmpeg);
+
+            if (_ffmpeg == "merge" && _isMaster != 1) {
+                channel.postMessage({
+                    Message: "mergeData",
+                    data: fileData
                 });
-            } else if (iframeFFmpegReady) {
-                iframeFFmpeg.contentWindow.postMessage(fileData, '*');
-                $progress.html(i18n.sendFfmpeg);
-            } else {
-                const timer = setInterval(() => {
-                    if (iframeFFmpegReady) {
-                        iframeFFmpeg.contentWindow.postMessage(fileData, '*');
-                        $progress.html(i18n.sendFfmpeg);
-                        clearInterval(timer);
-                    } else {
-                        iframeFFmpegReadyRetryCount++;
-                        if (iframeFFmpegReadyRetryCount > 10) {
-                            clearInterval(timer);
-                            $progress.html(i18n.ffmpegIsNotReady);
-                        }
-                    }
-                }, 5000);
+                return;
             }
+
+            document.querySelector("#onlineFFmpeg").style.display = "block";
+            createIframeFFmpeg(fileData);
             showTab("#iframeBox");
             return;
         }
@@ -2077,26 +2087,43 @@ function showTab(Obj) {
     });
 }
 
-let autoMergeTimer = null;
 function autoMerge() {
     if (!autoDown) { return; }
     clearTimeout(autoMergeTimer);
     autoMergeTimer = setTimeout(() => {
+        autoDown = false;   // 避免重复调用
         $("#mergeTs").click();
     }, 1000);
 }
 
-function createIframeFFmpeg(callback) {
+function createIframeFFmpeg(fileData) {
     if (!iframeFFmpeg) {
         iframeFFmpeg = document.createElement('iframe');
         document.querySelector("#iframeBox").appendChild(iframeFFmpeg);
         iframeFFmpeg.onload = function () {
             iframeFFmpegReady = true;
-            callback && callback();
+            fileData && iframeFFmpeg.contentWindow.postMessage(fileData, '*');
+            $progress.html(i18n.sendFfmpeg);
         };
         iframeFFmpeg.src = G.ffmpegConfig.url + '?_=' + new Date().getTime();
+    } else if (iframeFFmpegReady) {
+        fileData && iframeFFmpeg.contentWindow.postMessage(fileData, '*');
+        $progress.html(i18n.sendFfmpeg);
+    } else {
+        const timer = setInterval(() => {
+            if (iframeFFmpegReady) {
+                fileData && iframeFFmpeg.contentWindow.postMessage(fileData, '*');
+                $progress.html(i18n.sendFfmpeg);
+                clearInterval(timer);
+            } else {
+                iframeFFmpegReadyRetryCount++;
+                if (iframeFFmpegReadyRetryCount > 10) {
+                    clearInterval(timer);
+                    $progress.html(i18n.ffmpegIsNotReady);
+                }
+            }
+        }, 2000);
     }
-    return iframeFFmpeg;
 }
 
 // 接收 catCatchFFmpegResult
