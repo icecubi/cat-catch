@@ -636,6 +636,15 @@ function send2local(action, data, tabId = 0) {
                 }
             }
 
+            if (G.send2localHeaders) {
+                let customHeaders = templates(G.send2localHeaders, data);
+                customHeaders = JSONparse(customHeaders);
+                if (!option.headers) { option.headers = {}; }
+                for (let key in customHeaders) {
+                    option.headers[key] = customHeaders[key];
+                }
+            }
+
             send2localURL = send2localURL.toString();
             fetch(send2localURL, option)
                 .then(response => resolve(response))
