@@ -148,6 +148,11 @@
     // ========== 事件监听 ==========
     // 点击其他标签页时切换
     $("#otherTab").click(() => {
+
+        // 初始化
+        updateVideoTagOptions();
+        setVideoTagTimer();
+
         chrome.tabs.get(G.mediaControl.tabid, (tab) => {
             if (chrome.runtime.lastError) {
                 _tabId = -1;
@@ -175,6 +180,7 @@
     $("#videoIndex, #videoTabIndex").change(function () {
         if (this.id === "videoTabIndex") {
             _tabId = parseInt($("#videoTabIndex").val());
+            _index = 0;
         } else {
             _index = parseInt($("#videoIndex").val());
         }
@@ -271,8 +277,4 @@
         if (_index < 0 || _tabId < 0) return;
         chrome.tabs.sendMessage(_tabId, { Message: "screenshot", index: _index });
     });
-
-    // 初始化
-    updateVideoTagOptions();
-    setVideoTagTimer();
 })();
