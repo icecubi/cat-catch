@@ -268,12 +268,13 @@ class FilePreview {
      */
     deleteItem(data = null) {
         data = data ? [data] : this.getSelectedItems();
-        data.forEach(item => {
-            const index = this.originalItems.findIndex(originalItem => originalItem.requestId === item.requestId);
-            if (index !== -1) {
-                this.originalItems.splice(index, 1);
-            }
+
+        const deleteIds = new Set(data.map(item => item.requestId));
+        const deleteNames = this.deleteDuplicateFilenames ? new Set(data.map(item => item.name)) : new Set();
+        this.originalItems = this.originalItems.filter(item => {
+            return !deleteIds.has(item.requestId) && !(this.deleteDuplicateFilenames && deleteNames.has(item.name));
         });
+
         this.updateFileList();
     }
     /**
