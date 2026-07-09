@@ -1,23 +1,15 @@
-importScripts("/js/function.js", "/js/templates.js", "/js/init.js");
+importScripts("/js/polyfill.js", "/js/function.js", "/js/templates.js", "/js/init.js");
 
-// Service Worker 5分钟后会强制终止扩展
-// https://bugs.chromium.org/p/chromium/issues/detail?id=1271154
-// https://stackoverflow.com/questions/66618136/persistent-service-worker-in-chrome-extension/70003493#70003493
-chrome.webNavigation.onBeforeNavigate.addListener(function () { return; });
-chrome.webNavigation.onHistoryStateUpdated.addListener(function () { return; });
-chrome.runtime.onConnect.addListener(function (Port) {
-    if (chrome.runtime.lastError || Port.name !== "HeartBeat") return;
-    Port.postMessage("HeartBeat");
-    Port.onMessage.addListener(function (message, Port) { return; });
-    const interval = setInterval(function () {
-        clearInterval(interval);
-        Port.disconnect();
-    }, 250000);
-    Port.onDisconnect.addListener(function () {
-        interval && clearInterval(interval);
-        if (chrome.runtime.lastError) { return; }
-    });
-});
+// 全局变量
+let debounce = undefined;
+let debounceCount = 0;
+let debounceTime = 0;
+const reFilename = /filename="?([^"]+)"?/;
+
+G.deepSearchTemporarilyClose = null; // 深度搜索临时变量
+G.urlMap = new Map();   // url查重map
+G.requestHeaders = new Map();   // 临时储存请求头
+G.blackList = new Set();    // 正则屏蔽资源列表
 
 /**
  *  定时任务
@@ -974,7 +966,99 @@ function isSpecialPage(url) {
     return !(url.startsWith("http://") || url.startsWith("https://") || url.startsWith("blob:"));
 }
 
+/**
+ * 清理冗余数据
+ */
+function clearRedundant() {
+    chrome.tabs.query({}, function (tabs) {
+        const allTabId = new Set(tabs.map(tab => tab.id));
+
+        if (!cacheData.init) {
+            // 清理 缓存数据
+            let cacheDataFlag = false;
+            for (let key in cacheData) {
+                if (!allTabId.has(Number(key))) {
+                    cacheDataFlag = true;
+                    delete cacheData[key];
+                }
+            }
+            cacheDataFlag && (chrome.storage.session ?? chrome.storage.local).set({ MediaData: cacheData });
+        }
+
+        // 清理
+        G.urlMap.forEach((_, key) => {
+            !allTabId.has(key) && G.urlMap.delete(key);
+        });
+
+        // 清理脚本
+        G.scriptList.forEach(function (scriptList) {
+            scriptList.tabId.forEach(function (tabId) {
+                if (!allTabId.has(tabId)) {
+                    scriptList.tabId.delete(tabId);
+                }
+            });
+        });
+
+        if (!G.initLocalComplete) { return; }
+
+        // 清理 declarativeNetRequest 模拟手机
+        chrome.declarativeNetRequest.getSessionRules(function (rules) {
+            let mobileFlag = false;
+            for (let item of rules) {
+                if (item.condition.tabIds) {
+                    // 如果tabIds列表都不存在 则删除该条规则
+                    if (!item.condition.tabIds.some(id => allTabId.has(id))) {
+                        mobileFlag = true;
+                        item.condition.tabIds.forEach(id => G.featMobileTabId.delete(id));
+                        chrome.declarativeNetRequest.updateSessionRules({
+                            removeRuleIds: [item.id]
+                        });
+                    }
+                } else if (item.id == 1) {
+                    // 清理预览视频增加的请求头
+                    chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [1] });
+                }
+            }
+            mobileFlag && (chrome.storage.session ?? chrome.storage.local).set({ featMobileTabId: Array.from(G.featMobileTabId) });
+        });
+        // 清理自动下载
+        let autoDownFlag = false;
+        G.featAutoDownTabId.forEach(function (tabId) {
+            if (!allTabId.has(tabId)) {
+                autoDownFlag = true;
+                G.featAutoDownTabId.delete(tabId);
+            }
+        });
+        autoDownFlag && (chrome.storage.session ?? chrome.storage.local).set({ featAutoDownTabId: Array.from(G.featAutoDownTabId) });
+
+        G.blockUrlSet = new Set([...G.blockUrlSet].filter(x => allTabId.has(x)));
+        G.damnUrlSet = new Set([...G.damnUrlSet].filter(x => allTabId.has(x)));
+
+        if (G.requestHeaders.size >= 10240) {
+            G.requestHeaders.clear();
+        }
+    });
+}
+
+// 扩展升级，清空本地储存
+chrome.runtime.onInstalled.addListener(function (details) {
+    if (details.reason == "update") {
+        chrome.storage.local.clear(function () {
+            if (chrome.storage.session) {
+                chrome.storage.session.clear(InitOptions);
+            } else {
+                InitOptions();
+            }
+        });
+        chrome.alarms.create("nowClear", { when: Date.now() + 3000 });
+    }
+    if (details.reason == "install") {
+        chrome.tabs.create({ url: "install.html" });
+    }
+});
+
 // 测试
-// chrome.storage.local.get(function (data) { console.log(data.MediaData) });
-// chrome.declarativeNetRequest.getSessionRules(function (rules) { console.log(rules); });
-// chrome.tabs.query({}, function (tabs) { for (let item of tabs) { console.log(item.id); } });
+// chrome.storage.local.get(function (data) { console.log("storageLocal", data.MediaData) });
+// chrome.storage.session.get(function (data) { console.log("storageSession", data.MediaData) });
+// chrome.declarativeNetRequest.getSessionRules(function (rules) { console.log("sessionRules", rules); });
+// chrome.tabs.query({}, function (tabs) { for (let item of tabs) { console.log("tabId", item.id); } });

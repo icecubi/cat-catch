@@ -1,55 +1,10 @@
-// 低版本chrome manifest v3协议 会有 getMessage 函数不存在的bug
-if (chrome.i18n.getMessage === undefined) {
-    chrome.i18n.getMessage = (key) => key;
-    fetch(chrome.runtime.getURL("_locales/zh_CN/messages.json")).then(res => res.json()).then(data => {
-        chrome.i18n.getMessage = (key) => data[key].message;
-    }).catch((e) => { console.error(e); });
-}
-/**
- * 部分修改版chrome 不存在 chrome.downloads API
- * 例如 夸克浏览器
- * 使用传统下载方式下载 但无法监听 无法另存为 无法判断下载是否失败 唉~
- */
-if (!chrome.downloads) {
-    chrome.downloads = {
-        download: function (options, callback) {
-            let a = document.createElement('a');
-            a.href = options.url;
-            a.download = options.filename;
-            a.click();
-            a = null;
-            callback && callback();
-        },
-        onChanged: { addListener: function () { } },
-        showDefaultFolder: function () { },
-        show: function () { },
-    }
-}
-// 兼容 114版本以下没有chrome.sidePanel
-if (!chrome.sidePanel || !chrome.sidePanel.setPanelBehavior) {
-    chrome.sidePanel = {
-        setOptions: function (options) { },
-        setPanelBehavior: function (options) { },
-    }
-}
-
-// 简写翻译函数
-const i18n = new Proxy(chrome.i18n.getMessage, {
-    get: function (target, key) {
-        return chrome.i18n.getMessage(key);
-    }
-});
 // 全局变量
 var G = {};
 G.initSyncComplete = false;
 G.initLocalComplete = false;
 // 缓存数据
 var cacheData = { init: true };
-G.blackList = new Set();    // 正则屏蔽资源列表
 G.blockUrlSet = new Set();    // 屏蔽网址列表
-G.requestHeaders = new Map();   // 临时储存请求头
-G.urlMap = new Map();   // url查重map
-G.deepSearchTemporarilyClose = null; // 深度搜索临时变量
 
 // 避免抓取列表
 G.damnUrl = [
@@ -122,28 +77,34 @@ G.OptionLists = {
         { "type": "ig", "regex": "(^https://scontent[a-z0-9-]*\\.cdninstagram\\.com/.*)&bytestart=.*", "ext": "", "blackList": false, "state": false },
         { "type": "ig", "regex": "(^https://.*\\.fbcdn\\.net/.*)&bytestart=.*", "ext": "", "blackList": false, "state": false },
     ],
-    TitleName: false,
-    Player: "",
-    ShowWebIco: !G.isMobile,
-    MobileUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
-    m3u8dl: 0,
+    TitleName: false,   // 使用自定义文件名保存文件(默认为网页标题)
+    Player: "", // 使用本地播放器调用协议打开视频预览
+    ShowWebIco: !G.isMobile,    // 显示网页图标
+    MobileUserAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",   // 模拟手机浏览器UA
+
+    // m3u8dl: 协议
+    m3u8dl: 0,  // 0:禁用 1:CIL 2:RE
     m3u8dlArg: `"\${url}" --save-dir "%USERPROFILE%\\Downloads\\m3u8dl" --save-name "\${title}_\${now}" \${referer|exists:'-H "Referer:*"'} \${cookie|exists:'-H "Cookie:*"'} --no-log`,
-    m3u8dlConfirm: false,
-    playbackRate: 2,
+    m3u8dlConfirm: false, // 点击下载后是否提示 确认参数
+
+    playbackRate: 2,    // 默认播放倍率
+
+    // 复制
     copyM3U8: "${url}",
     copyMPD: "${url}",
     copyOther: "${url}",
-    autoClearMode: 1,
-    catDownload: false,
-    saveAs: false,
+
+    autoClearMode: 1,   // 清理模式 0:不清理 1:正常清理 2:更频繁
+    catDownload: false, // 始终不启用猫抓下载器
+    saveAs: false,  // 下载完选择保存目录 另存为
     userAgent: "",
-    downFileName: "${title}.${ext}",
-    css: "",
-    checkDuplicates: true,
-    enable: true,
+    downFileName: "${title}.${ext}",    // 默认下载文件名
+    css: "",    // 自定义css
+    checkDuplicates: true,  // 检查重复项
+    enable: true,   // 启用总开关
     downActive: !G.isMobile,    // 手机端默认不启用 后台下载
-    downAutoClose: true,
-    downStream: false,
+    downAutoClose: true,    // 下载后自动关闭
+    downStream: false,  // 边下边存
 
     // Aria2
     aria2Rpc: "http://localhost:6800/jsonrpc",
@@ -152,8 +113,8 @@ G.OptionLists = {
     aria2RpcToken: "",
     aria2RpcDir: "",
 
-    m3u8AutoDown: true,
-    badgeNumber: true,
+    m3u8AutoDown: true, // m3u8自动下载
+    badgeNumber: true,  // 显示数字徽章
 
     // 发送到本地
     send2local: false,
@@ -164,7 +125,7 @@ G.OptionLists = {
     send2localType: 0,
     send2localHeaders: "",
 
-    popup: false,
+    popup: false,   // 是否默认弹出模式
     popupMode: 0, // 0:preview.html 1:popup.html 2:window preview.html 3: window popup.html
 
     // 远程调用
@@ -189,6 +150,7 @@ G.OptionLists = {
     maxLength: G.isMobile ? 999 : 9999,
     sidePanel: false,   // 侧边栏
     deepSearch: false, // 常开深度搜索
+
     // MQTT 配置
     send2MQTT: false,
     mqttEnable: false,
@@ -204,10 +166,12 @@ G.OptionLists = {
     mqttTitleLength: 100,
     mqttDataFormat: "",
 
-    getHtmlDOM: false,
-    damn: false,
-    iframeFFmpeg: false,
-    contextMenus: false,
+    getHtmlDOM: false,  // 实验项 获取当前网页DOM
+
+    damn: false,    // 强制屏蔽网站开关
+
+    iframeFFmpeg: false,    // 潜入在线ffmpeg
+    contextMenus: false,    // 右键菜单
 };
 
 // 本地储存的配置
@@ -215,6 +179,8 @@ G.LocalVar = {
     featMobileTabId: [],
     featAutoDownTabId: [],
     mediaControl: { tabid: 0, index: -1 },
+
+    // 预览页面
     previewShowTitle: false, // 是否显示标题
     previewDeleteDuplicateFilenames: false, // 是否删除重复文件名
 };
@@ -249,16 +215,8 @@ G.streamSaverConfig = {
 }
 
 // 正则预编译
-const reFilename = /filename="?([^"]+)"?/;
-const reStringModify = /[<>:"\/\\|?*~]/g;
-const reFilterFileName = /[<>:"|?*~]/g;
-// const reTemplates = /\${([^}|]+)(?:\|([^}]+))?}/g;
-const reJSONparse = /([{,]\s*)([\w-]+)(\s*:)/g;
-
-// 防抖
-let debounce = undefined;
-let debounceCount = 0;
-let debounceTime = 0;
+const reFilterFileName = /[<>:"|?*~]/g; // 过滤文件名包含的非法字符
+const reJSONparse = /([{,]\s*)([\w-]+)(\s*:)/g; // JSON.parse 解析不带引号的key
 
 // Init
 InitOptions();
@@ -469,23 +427,6 @@ function contextMenusInit(visible = false) {
         });
     });
 }
-
-// 扩展升级，清空本地储存
-chrome.runtime.onInstalled.addListener(function (details) {
-    if (details.reason == "update") {
-        chrome.storage.local.clear(function () {
-            if (chrome.storage.session) {
-                chrome.storage.session.clear(InitOptions);
-            } else {
-                InitOptions();
-            }
-        });
-        chrome.alarms.create("nowClear", { when: Date.now() + 3000 });
-    }
-    if (details.reason == "install") {
-        chrome.tabs.create({ url: "install.html" });
-    }
-});
 
 /**
  * 将用户输入的URL（可能包含通配符）转换为正则表达式
