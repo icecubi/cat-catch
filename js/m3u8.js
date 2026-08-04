@@ -1861,7 +1861,7 @@ function mergeTsNew(down) {
             output: fileName,
             name: "memory" + new Date().getTime() + "." + ext,
             active: G.isMobile || !autoDown,
-            tabId: currentTabId,
+            tabId: currentTabId
         };
         if (_quantity) {
             data.quantity = parseInt(_quantity);
