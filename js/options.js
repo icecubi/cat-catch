@@ -48,6 +48,10 @@ chrome.storage.sync.get(G.OptionLists, function (items) {
             }
         }
     }, 100);
+
+    chrome.permissions.contains({ permissions: ["clipboardRead"] }).then(function (result) {
+        $("#clipboard").prop("checked", result);
+    });
 });
 
 //新增格式
@@ -175,7 +179,22 @@ $("[save='input']").on("input", function () {
     }, 300);
 });
 // 调试模式 使用网页标题做文件名 使用PotPlayer预览 显示网站图标 刷新自动清理
-$("[save='click']").bind("click", function () {
+$("[save='click']").bind("click", async function () {
+    if (this.id == 'clipboard') {
+        try {
+            if (this.checked) {
+                await chrome.permissions.request({ permissions: ['clipboardRead'] });
+            } else {
+                await chrome.permissions.remove({ permissions: ['clipboardRead'] });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        chrome.permissions.contains({ permissions: ["clipboardRead"] }).then(function (result) {
+            $("#clipboard").prop("checked", result);
+        });
+        return;
+    }
     chrome.storage.sync.set({ [this.id]: this.checked });
 });
 // [save='select'] 元素 储存
