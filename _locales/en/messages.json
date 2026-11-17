@@ -137,6 +137,20 @@
   "deepSearch": {
     "message": "Search"
   },
+  "umpDecode": {
+    "message": "Decode YouTube media streams (UMP)"
+  },
+  "umpProgress": {
+    "message": "Received $received$ of $total$ segments; grows as playback continues",
+    "placeholders": {
+      "received": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
+  },
   "closeSearch": {
     "message": "Close Search"
   },
@@ -1057,5 +1071,25 @@
   },
   "fileName": {
     "message": "File Name"
+  },
+  "videoFloat": {
+    "message": "Show a download panel next to videos"
+  },
+  "videoFloatOther": {
+    "message": "Other resources on this page"
+  },
+  "videoFloatDownloadStarted": {
+    "message": "Download started"
+  },
+  "videoFloatLimit": {
+    "message": "Showing $show$ of $total$ resources",
+    "placeholders": {
+      "show": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
   }
 }

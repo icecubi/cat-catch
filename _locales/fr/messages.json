@@ -137,6 +137,20 @@
   "deepSearch": {
     "message": "Rechercher"
   },
+  "umpDecode": {
+    "message": "Décoder les flux multimédias de YouTube (UMP)"
+  },
+  "umpProgress": {
+    "message": "$received$ segments reçus sur $total$ ; augmente au fil de la lecture",
+    "placeholders": {
+      "received": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
+  },
   "closeSearch": {
     "message": "Fermer La Recherche"
   },
@@ -1057,5 +1071,25 @@
   },
   "fileName": {
     "message": "Nom du Fichier"
+  },
+  "videoFloat": {
+    "message": "Afficher un panneau de téléchargement à côté des vidéos"
+  },
+  "videoFloatOther": {
+    "message": "Autres ressources de cette page"
+  },
+  "videoFloatDownloadStarted": {
+    "message": "Téléchargement démarré"
+  },
+  "videoFloatLimit": {
+    "message": "Affichage de $show$ ressources sur $total$",
+    "placeholders": {
+      "show": {
+        "content": "$1"
+      },
+      "total": {
+        "content": "$2"
+      }
+    }
   }
 }
